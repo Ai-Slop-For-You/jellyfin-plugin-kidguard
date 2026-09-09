@@ -8,6 +8,14 @@
     "category": "General",
     "versions": [
       {
+        "version": "0.1.2.0",
+        "targetAbi": "12.0.0.0",
+        "changelog": "Remove orphaned profiles after Jellyfin user deletion, with durable metadata cleanup and recovery.",
+        "timestamp": "2026-09-09T00:00:00Z",
+        "sourceUrl": "https://github.com/Ai-Slop-For-You/jellyfin-plugin-kidguard/releases/download/v0.1.2.0/KidGuard_0.1.2.0.zip",
+        "checksum": "7e2750a48ecd2602692316030b26728b"
+      },
+      {
         "version": "0.1.1.0",
         "targetAbi": "12.0.0.0",
         "changelog": "Clearer series recommendations, explicit episode rating fallback and stricter TV-PG starting point.",
