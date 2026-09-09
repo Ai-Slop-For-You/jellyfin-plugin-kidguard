@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.1.2.0 — 2026-09-09
+
+- Remove KidGuard profiles whose linked Jellyfin account was deleted, on dashboard load, startup and background checks.
+- Clear the deleted profile's approval and recovery state, remove its owned tags and refresh the family catalog. Failed metadata cleanup is queued durably for retry.
+- Preserve uncreated drafts, all existing Jellyfin users and unrelated metadata. Account matching uses immutable IDs; reusing a username never reconnects an old profile.
+- Upgrade and restart, then reopen KidGuard. No reanalysis or Apply is needed to clear profiles belonging to deleted accounts.
+
 ## 0.1.1.0 — 2026-09-09
 
 - Age 9+ automatically recommends appropriately certified TV-Y/TV-Y7 children’s television despite gentler calibration; younger profiles retain stricter age checks. Explicit limits and overrides remain authoritative.

@@ -29,6 +29,7 @@ public sealed class LibraryAdapter(ILibraryManager library, IUserManager users)
         item.ParentId == Guid.Empty ? null : item.ParentId, item.CustomRating ?? item.OfficialRating, item.ProductionYear,
         item.Genres, item.Tags, item.Overview, new(item.ProviderIds, StringComparer.OrdinalIgnoreCase), item.GetParents().Select(p => p.Id).ToArray());
     public BaseItem? Get(Guid id) => library.GetItemById(id);
+    public bool UserExists(Guid id) => users.GetUserById(id) is not null;
     public object[] Users() => users.GetUsers().Select(u => new { u.Id, Name = u.Username, IsAdministrator = users.GetUserDto(u).Policy.IsAdministrator }).Cast<object>().ToArray();
     public UserPolicy Policy(Guid id) => Json.Clone(users.GetUserDto(users.GetUserById(id) ?? throw new ArgumentException("User not found")).Policy);
     public Task SetPolicy(Guid id, UserPolicy policy) => users.UpdatePolicyAsync(id, policy);
@@ -49,8 +50,15 @@ public sealed class LibraryAdapter(ILibraryManager library, IUserManager users)
         var item = Get(id); if (item is null) return;
         var updated = ApprovalPlanner.UpdateTags(item.Tags, remove, add);
         if (item.Tags.SequenceEqual(updated)) return;
+        var before = item.Tags;
         item.Tags = updated;
-        await library.UpdateItemAsync(item, item.GetParent(), ItemUpdateType.MetadataEdit, cancellation).ConfigureAwait(false);
+        try { await library.UpdateItemAsync(item, item.GetParent(), ItemUpdateType.MetadataEdit, cancellation).ConfigureAwait(false); }
+        catch
+        {
+            // A failed write must not look complete on retry through Jellyfin's in-memory item cache.
+            if (ReferenceEquals(item.Tags, updated)) item.Tags = before;
+            throw;
+        }
     }
     public static UserPolicy ChildPolicy(UserPolicy previous, ChildProfile profile, string tag)
     {

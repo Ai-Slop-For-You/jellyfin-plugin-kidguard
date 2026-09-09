@@ -10,8 +10,9 @@ namespace Jellyfin.Plugin.KidGuard.Api;
 public sealed class KidGuardController(Manager manager) : ControllerBase
 {
     [HttpGet("Dashboard")]
-    public ActionResult<object> Dashboard()
+    public async Task<ActionResult<object>> Dashboard()
     {
+        await manager.ReconcileDeletedUsers().ConfigureAwait(false);
         var state = manager.Snapshot();
         var settings = Json.Clone(state.Settings); settings.TmdbToken = "";
         return Ok(new { Profiles = state.Profiles.Select(p => new { p.Id, p.Label, p.Age, p.Approach, p.Applied, p.Revision,

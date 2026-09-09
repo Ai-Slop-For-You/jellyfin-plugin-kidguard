@@ -22,6 +22,8 @@ public sealed class DurableState
     public Dictionary<Guid, Journal> Undo { get; set; } = [];
     public Journal? Pending { get; set; }
     public Dictionary<Guid, ChildProfile> ApprovedSettings { get; set; } = [];
+    public Dictionary<string, HashSet<Guid>> OrphanTags { get; set; } = [];
+    public bool RefreshFamilyPending { get; set; }
 }
 public record ScanProgress(bool Running, int Complete, int Total, string? Error);
 public sealed class Manager
@@ -48,6 +50,70 @@ public sealed class Manager
     public ScanProgress Progress { get { lock (_sync) return _progress; } }
     public bool RecoveryRequired { get { lock (_sync) return _state.Pending is not null; } }
     public object[] Users() => _library.Users();
+    public async Task ReconcileDeletedUsers(CancellationToken cancellation = default)
+    {
+        await _write.WaitAsync(cancellation).ConfigureAwait(false);
+        try
+        {
+            lock (_sync)
+            {
+                // Match immutable user IDs, never usernames. Unapplied drafts without an account remain.
+                // Database lookup errors abort reconciliation instead of treating an outage as deletion.
+                var missing = _state.Data.Profiles.Where(p => p.UserId.HasValue && !_library.UserExists(p.UserId.Value)).ToArray();
+                foreach (var profile in missing)
+                {
+                    void Queue(string? tag, IEnumerable<Guid> ids)
+                    {
+                        if (tag is null) return;
+                        if (!_state.OrphanTags.TryGetValue(tag, out var items)) _state.OrphanTags[tag] = items = [];
+                        items.UnionWith(ids);
+                    }
+                    Queue(profile.ActiveTag, profile.Approved.Union(profile.Navigation));
+                    var journals = new[] { _state.Undo.GetValueOrDefault(profile.Id), _state.Pending?.ProfileId == profile.Id ? _state.Pending : null };
+                    foreach (var journal in journals)
+                    {
+                        if (journal is null) continue;
+                        Queue(journal.StagedTag, journal.TaggedItems);
+                        Queue(journal.Before.ActiveTag, journal.Before.Approved.Union(journal.Before.Navigation));
+                    }
+                    _state.Data.Profiles.Remove(profile);
+                    _state.ApprovedSettings.Remove(profile.Id);
+                    _state.Undo.Remove(profile.Id);
+                    if (_state.Pending?.ProfileId == profile.Id) _state.Pending = null;
+                    Audit(profile.Id, "Removed profile because its linked Jellyfin user was deleted.", removed: profile.Approved.Count);
+                }
+                if (missing.Length > 0)
+                {
+                    _state.RefreshFamilyPending = true;
+                    Persist(); // Save removal and cleanup intent together before touching metadata.
+                }
+            }
+            KeyValuePair<string, HashSet<Guid>>[] cleanup;
+            lock (_sync) cleanup = _state.OrphanTags.ToArray();
+            foreach (var (tag, items) in cleanup)
+            {
+                try
+                {
+                    foreach (var id in items) await _library.Tag(id, tag, null, cancellation).ConfigureAwait(false);
+                    lock (_sync) { _state.OrphanTags.Remove(tag); Persist(); }
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                { _logger.LogWarning(e, "KidGuard will retry deleted-profile tag cleanup"); }
+            }
+            bool refresh; lock (_sync) refresh = _state.RefreshFamilyPending;
+            if (refresh)
+            {
+                try
+                {
+                    await UpdateFamilyTags(cancellation).ConfigureAwait(false);
+                    lock (_sync) { _state.RefreshFamilyPending = false; Persist(); }
+                }
+                catch (Exception e) when (e is not OperationCanceledException)
+                { _logger.LogWarning(e, "KidGuard will retry the family catalog update after user deletion"); }
+            }
+        }
+        finally { _write.Release(); }
+    }
     public AccessSnapshot? AccessFor(Guid userId)
     {
         lock (_sync)
@@ -186,9 +252,14 @@ public sealed class Manager
     }
     private async Task AutoApprove(Guid id, CancellationToken cancellation)
     {
-        var state = Snapshot(); var p = state.Profiles.Single(x => x.Id == id);
+        var state = Snapshot(); var p = state.Profiles.FirstOrDefault(x => x.Id == id);
+        if (p is null) return; // The linked user may have been deleted while analysis completed.
         ChildProfile approvedSettings;
-        lock (_sync) approvedSettings = Json.Clone(_state.ApprovedSettings[id]);
+        lock (_sync)
+        {
+            if (!_state.ApprovedSettings.TryGetValue(id, out var settings)) return;
+            approvedSettings = Json.Clone(settings);
+        }
         var engine = new RecommendationEngine();
         var additions = p.PendingNew.Where(state.Cache.ContainsKey).Where(i => state.Cache[i].Item.Kind is MediaKind.Movie or MediaKind.Episode)
             .Where(i => { var rec = engine.Evaluate(approvedSettings, state.Cache[i], state.Cache); return rec.Decision == Decision.Allow && rec.Confidence >= state.Settings.AutoConfidence; })
@@ -274,6 +345,7 @@ public sealed class Manager
     }
     public async Task RecoverOnStart()
     {
+        await ReconcileDeletedUsers().ConfigureAwait(false);
         Journal? pending; lock (_sync) pending = _state.Pending;
         if (pending is null) return;
         var policy = _library.Policy(pending.UserId); policy.IsDisabled = true;

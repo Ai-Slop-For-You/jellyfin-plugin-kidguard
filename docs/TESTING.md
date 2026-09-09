@@ -42,3 +42,7 @@ Final browser verification also found and fixed JSON parsing of successful empty
 ## 0.1.1 recommendation regression coverage
 
 Additional synthetic tests cover decisive TV-Y/TV-Y7/TV-PG/TV-14 series results for age nine, positive calibration, ancestor-rating fallback, higher-rated episode exceptions, fallback provenance, missing explicit advisory dimensions, episode advisory blocks, provider failures and closest-season precedence. The 0.1.1.0 package passed all 74 automated tests and all 38 live access checks. An additional live draft-profile check verified a rated series now returns Allow with no manual override and without creating a child account. Tests also cover age-nine children’s-TV allowances despite gentler calibration, stricter age-six behavior, and exclusion of genre-only guesses.
+
+## 0.1.2 deleted-account regression coverage
+
+The release passed 80 automated tests and 44 isolated live-server checks (30 access assertions, 8 additional route probes and 6 deleted-account checks). Unit regressions cover missing linked users, preserved uncreated drafts and existing accounts, durable cleanup retries, user-database lookup failures, reused usernames with different IDs, and deleted users during interrupted apply/startup recovery. `scripts/deleted-user-tests.py` creates two disposable linked accounts on the fixture server, deletes them through Jellyfin, and verifies dashboard removal, preservation of other profiles, no user recreation, owned-tag cleanup, audit entries and idempotence. Results are in `deleted-user-results.json`.

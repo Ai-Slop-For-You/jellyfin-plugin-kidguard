@@ -1,6 +1,6 @@
 # KidGuard for Jellyfin
 
-An installable, parent-reviewed child-library manager for **Jellyfin Server 12.0.0** and Jellyfin Web 12.0. Built with .NET 10. Version **0.1.1.0 is an evaluated preview**, with automated tests and isolated real-server access tests. It is not an independently audited parental-security product. Read [security scope](docs/SECURITY.md) before using it for a child account.
+An installable, parent-reviewed child-library manager for **Jellyfin Server 12.0.0** and Jellyfin Web 12.0. Built with .NET 10. Version **0.1.2.0 is an evaluated preview**, with automated tests and isolated real-server access tests. It is not an independently audited parental-security product. Read [security scope](docs/SECURITY.md) before using it for a child account.
 
 ## Install
 
@@ -13,7 +13,7 @@ https://raw.githubusercontent.com/Ai-Slop-For-You/jellyfin-plugin-kidguard/main/
 Install **KidGuard** from the catalog and restart Jellyfin. Requires Jellyfin **12.0.0**. [Release downloads](https://github.com/Ai-Slop-For-You/jellyfin-plugin-kidguard/releases) include the plugin, corresponding source and checksums. For manual installation:
 
 1. Back up Jellyfin's configuration and database. Start with a test server.
-2. Stop Jellyfin. Extract `KidGuard_0.1.1.0.zip` into a new `KidGuard_0.1.1.0` directory inside Jellyfin's **plugins directory**. Keep both DLLs together. Do not copy Jellyfin's own dependency DLLs into the plugin directory.
+2. Stop Jellyfin. Extract `KidGuard_0.1.2.0.zip` into a new `KidGuard_0.1.2.0` directory inside Jellyfin's **plugins directory**. Keep both DLLs together. Do not copy Jellyfin's own dependency DLLs into the plugin directory.
 3. Restart Jellyfin. Confirm KidGuard is Active under **Dashboard → Plugins**.
 4. Open **Dashboard → KidGuard**. The configuration URL is `web/#/configurationpage?name=kidguard` relative to your Jellyfin server.
 5. Analyze the library, create a draft child profile or select an existing non-admin user, set age/comfort preferences, and answer the calibration questions.
@@ -66,6 +66,10 @@ TMDb supplies certifications, **not comprehensive scene advisories**. Detailed l
 Ratings are editorial starting points, not exact developmental age guarantees. Country mappings currently cover selected US, GB and DE certifications; unmapped ratings require review. Confidence is a heuristic, not a statistically calibrated probability.
 
 This product uses the TMDB API but is not endorsed or certified by TMDB. Follow TMDb's attribution/licensing requirements when distributing a derivative UI or enabling a commercial use case. No TMDb data is bundled in this release.
+
+## Deleted Jellyfin users
+
+Deleting a Jellyfin account also removes its linked KidGuard profile when the dashboard next opens or during the next background check (normally within 30 seconds). Startup handles accounts deleted while Jellyfin was stopped. Uncreated drafts remain. KidGuard does not delete or recreate Jellyfin users during this cleanup; a new account with the same name has a different ID and does not inherit the deleted profile. Cleanup removes owned tags and updates the family catalog, retrying metadata failures in the background. An audit entry records the profile removal.
 
 ## Upgrade, recovery and uninstall
 

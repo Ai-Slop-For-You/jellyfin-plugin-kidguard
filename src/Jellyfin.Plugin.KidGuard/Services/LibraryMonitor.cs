@@ -19,6 +19,9 @@ public sealed class LibraryMonitor(Manager manager, ILibraryManager library, ILo
             while (await timer.WaitForNextTickAsync(stoppingToken).ConfigureAwait(false))
             {
                 ticks++;
+                try { await manager.ReconcileDeletedUsers(stoppingToken).ConfigureAwait(false); }
+                catch (Exception e) when (e is not OperationCanceledException)
+                { logger.LogWarning(e, "KidGuard will retry deleted-user reconciliation"); }
                 if (manager.Progress.Running || manager.RecoveryRequired) continue;
                 if (Interlocked.Exchange(ref _dirty, 0) != 0 || ticks % 10 == 0)
                 { try { manager.StartScan(); } catch (InvalidOperationException) { } }

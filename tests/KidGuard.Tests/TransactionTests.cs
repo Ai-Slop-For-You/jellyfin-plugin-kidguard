@@ -59,5 +59,63 @@ public sealed class TransactionTests : IDisposable
     {Add(true);await Create(NewMediaBehavior.Automatic);await Apply();var fresh=Add();fresh.OfficialRating=null;await Scan();Assert.DoesNotContain(fresh.Id,Profile().Approved);}
     [Fact] public async Task OrdinaryDecisionsExpireOnAnalysisButAlwaysDecisionsRemain()
     {var one=Add();var two=Add();await Create();await _manager.Overrides(Profile().Id,[one.Id],OverrideKind.Block,Profile().Revision);await _manager.Overrides(Profile().Id,[two.Id],OverrideKind.AlwaysBlock,Profile().Revision);await Scan();Assert.False(Profile().Overrides.ContainsKey(one.Id));Assert.Equal(OverrideKind.AlwaysBlock,Profile().Overrides[two.Id]);}
+    private void DeleteFixtureUser() => _users.Setup(u => u.GetUserById(_user.Id)).Returns((User?)null);
+    private DurableState Stored() => new AtomicStore<DurableState>(Path.Combine(_dir, "kidguard", "state.json")).Read();
+    [Fact] public async Task DeletedUserRemovesProfileSnapshotsAndOnlyOwnedTags()
+    {
+        var item = Add(); item.Tags = ["Favorite"]; await Create(); await Apply(); var id = Profile().Id;
+        DeleteFixtureUser(); await _manager.ReconcileDeletedUsers();
+        Assert.Empty(_manager.Snapshot().Profiles); Assert.Null(_manager.AccessFor(_user.Id));
+        Assert.Empty(_manager.FamilyIds(_manager.Snapshot())); Assert.Equal(["Favorite"], item.Tags);
+        var stored = Stored(); Assert.Empty(stored.Undo); Assert.Empty(stored.ApprovedSettings); Assert.Empty(stored.OrphanTags);
+        Assert.Contains(stored.Data.Audit, a => a.ProfileId == id && a.Action.Contains("user was deleted"));
+        await _manager.ReconcileDeletedUsers(); Assert.Single(Stored().Data.Audit, a => a.Action.Contains("user was deleted"));
+        _users.Verify(u => u.CreateUserAsync(It.IsAny<string>()), Times.Never);
+        _users.Verify(u => u.DeleteUserAsync(It.IsAny<Guid>()), Times.Never);
+    }
+    [Fact] public async Task ReconciliationPreservesUncreatedDraftsAndExistingUsers()
+    {
+        Add(); await Create(); var live = Profile().Id;
+        var draft = await _manager.SaveProfile(new() { Label = "Uncreated", NewUsername = "Future child", Age = 6 });
+        await _manager.ReconcileDeletedUsers(); Assert.Equal(2, _manager.Snapshot().Profiles.Count);
+        DeleteFixtureUser(); await _manager.ReconcileDeletedUsers();
+        Assert.Equal(draft.Id, _manager.Snapshot().Profiles.Single().Id);
+        Assert.DoesNotContain(_manager.Snapshot().Profiles, p => p.Id == live);
+        Assert.Null(_manager.Snapshot().Profiles.Single().UserId);
+    }
+    [Fact] public async Task DeletedAccountDuringInterruptedApplyDoesNotBlockStartupRecovery()
+    {
+        Add(); await Create(); _failTag = true; await Assert.ThrowsAsync<IOException>(Apply);
+        Assert.True(_manager.RecoveryRequired); DeleteFixtureUser(); _failTag = false;
+        var restarted = new Manager(_paths.Object, new(_library.Object, _users.Object), _analysis, NullLogger<Manager>.Instance);
+        await restarted.RecoverOnStart(); Assert.False(restarted.RecoveryRequired); Assert.Empty(restarted.Snapshot().Profiles);
+        Assert.Null(Stored().Pending);
+    }
+    [Fact] public async Task LookupFailureNeverMeansAccountDeletion()
+    {
+        Add(); await Create(); var id = Profile().Id;
+        _users.Setup(u => u.GetUserById(_user.Id)).Throws(new IOException("User database unavailable"));
+        await Assert.ThrowsAsync<IOException>(() => _manager.ReconcileDeletedUsers());
+        Assert.Equal(id, Profile().Id); Assert.Single(Stored().Data.Profiles);
+    }
+    [Fact] public async Task OrphanMetadataCleanupIsDurableAndRetriedAfterFailure()
+    {
+        var item = Add(); item.Tags = ["Favorite"]; await Create(); await Apply();
+        DeleteFixtureUser(); _failTag = true; await _manager.ReconcileDeletedUsers();
+        Assert.Empty(_manager.Snapshot().Profiles); Assert.NotEmpty(Stored().OrphanTags);
+        Assert.Contains(item.Tags, t => t.StartsWith("KidGuard:"));
+        _failTag = false;
+        var restarted = new Manager(_paths.Object, new(_library.Object, _users.Object), _analysis, NullLogger<Manager>.Instance);
+        await restarted.ReconcileDeletedUsers(); Assert.Empty(Stored().OrphanTags);
+        Assert.Equal(["Favorite"], item.Tags); Assert.False(Stored().RefreshFamilyPending);
+    }
+    [Fact] public async Task SameUsernameWithDifferentIdDoesNotInheritDeletedProfile()
+    {
+        Add(); await Create(); await Apply(); DeleteFixtureUser();
+        var replacement = new User(_user.Username, "auth", "reset");
+        _users.Setup(u => u.GetUserById(replacement.Id)).Returns(replacement);
+        await _manager.ReconcileDeletedUsers(); Assert.Empty(_manager.Snapshot().Profiles);
+        Assert.Null(_manager.AccessFor(replacement.Id));
+    }
     public void Dispose(){_analysis.Dispose();if(Directory.Exists(_dir))Directory.Delete(_dir,true);}
 }

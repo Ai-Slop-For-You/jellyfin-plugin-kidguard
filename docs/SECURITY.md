@@ -1,6 +1,6 @@
 # Security scope and release limitations
 
-KidGuard 0.1.1.0 is an installable evaluated preview for Jellyfin 12.0.0. It has automated tests and live access checks, but no independent audit or complete cross-client certification. Do not interpret a heuristic recommendation as a guarantee of age appropriateness.
+KidGuard 0.1.2.0 is an installable evaluated preview for Jellyfin 12.0.0. It has automated tests and live access checks, but no independent audit or complete cross-client certification. Do not interpret a heuristic recommendation as a guarantee of age appropriateness.
 
 ## Supported boundary
 
