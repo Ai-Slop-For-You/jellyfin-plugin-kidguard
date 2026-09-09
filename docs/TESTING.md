@@ -38,3 +38,7 @@ Jellyfin Web 12.0 was opened in a real browser. The first check found and correc
 - [x] Profile form and calibration saved; final rebuilt batch-save refreshed the decision; family/settings screens rendered.
 
 Final browser verification also found and fixed JSON parsing of successful empty POST responses. The packaged fix was verified by saving an AlwaysBlock decision and observing the refreshed table. See SECURITY.md for unsupported paths and the limits of these results. The GitHub Actions workflow does not automatically run the standalone server suite; it runs the automated suite and produces artifacts.
+
+## 0.1.1 recommendation regression coverage
+
+Additional synthetic tests cover decisive TV-Y/TV-Y7/TV-PG/TV-14 series results for age nine, positive calibration, ancestor-rating fallback, higher-rated episode exceptions, fallback provenance, missing explicit advisory dimensions, episode advisory blocks, provider failures and closest-season precedence. The 0.1.1.0 package passed all 74 automated tests and all 38 live access checks. An additional live draft-profile check verified a rated series now returns Allow with no manual override and without creating a child account. Tests also cover age-nine children’s-TV allowances despite gentler calibration, stricter age-six behavior, and exclusion of genre-only guesses.

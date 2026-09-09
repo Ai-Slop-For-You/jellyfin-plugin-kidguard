@@ -1,6 +1,6 @@
 # KidGuard for Jellyfin
 
-An installable, parent-reviewed child-library manager for **Jellyfin Server 12.0.0** and Jellyfin Web 12.0. Built with .NET 10. Version **0.1.0.0 is an evaluated preview**, with automated tests and isolated real-server access tests. It is not an independently audited parental-security product. Read [security scope](docs/SECURITY.md) before using it for a child account.
+An installable, parent-reviewed child-library manager for **Jellyfin Server 12.0.0** and Jellyfin Web 12.0. Built with .NET 10. Version **0.1.1.0 is an evaluated preview**, with automated tests and isolated real-server access tests. It is not an independently audited parental-security product. Read [security scope](docs/SECURITY.md) before using it for a child account.
 
 ## Install
 
@@ -13,7 +13,7 @@ https://raw.githubusercontent.com/Ai-Slop-For-You/jellyfin-plugin-kidguard/main/
 Install **KidGuard** from the catalog and restart Jellyfin. Requires Jellyfin **12.0.0**. [Release downloads](https://github.com/Ai-Slop-For-You/jellyfin-plugin-kidguard/releases) include the plugin, corresponding source and checksums. For manual installation:
 
 1. Back up Jellyfin's configuration and database. Start with a test server.
-2. Stop Jellyfin. Extract `KidGuard_0.1.0.0.zip` into a new `KidGuard_0.1.0.0` directory inside Jellyfin's **plugins directory**. Keep both DLLs together. Do not copy Jellyfin's own dependency DLLs into the plugin directory.
+2. Stop Jellyfin. Extract `KidGuard_0.1.1.0.zip` into a new `KidGuard_0.1.1.0` directory inside Jellyfin's **plugins directory**. Keep both DLLs together. Do not copy Jellyfin's own dependency DLLs into the plugin directory.
 3. Restart Jellyfin. Confirm KidGuard is Active under **Dashboard → Plugins**.
 4. Open **Dashboard → KidGuard**. The configuration URL is `web/#/configurationpage?name=kidguard` relative to your Jellyfin server.
 5. Analyze the library, create a draft child profile or select an existing non-admin user, set age/comfort preferences, and answer the calibration questions.
@@ -36,6 +36,12 @@ Typical plugin directories: `/var/lib/jellyfin/plugins` for Linux packages, `/co
 - Copy comfort settings; explicit reuse of decisions across children. No silent propagation.
 
 ## Decisions and television
+
+Recognized series ratings now produce Allow or Block directly, instead of forcing all series into Review. For children aged **9 and older**, TV-Y/TV-Y7 shows receive an Allow recommendation even when calibration is gentler, subject to explicit content limits, parent overrides and conflicting/failed evidence. Younger children retain stricter ceiling checks: a six-year-old's default profile blocks TV-Y7. TV-PG uses an editorial starting point of **12** (not an official age minimum); profile maturity and calibration settings still apply. Animation or a children's genre alone does not grant access.
+
+An episode or season without a recognized certification may use its closest rated TV ancestor's certification. The explanation identifies that fallback; it does not invent episode-specific advisories. An episode's own recognized rating takes precedence, explicit content constraints remain enforced, and fallback confidence is capped below the automatic-addition threshold. New-media review and explicit Apply remain in place.
+
+After upgrading, **Reanalyze**, inspect the proposed library, then **Approve & Apply**. Existing applied permissions do not change just because the plugin was upgraded. Ordinary Allow/Block decisions expire on reanalysis; Always decisions persist.
 
 **Allow / Block** are draft decisions that expire at the next analysis. **Always Allow / Always Block** persist through analysis. **Reset to recommendation** removes the manual decision. Every edit stays draft until Apply. Calibration answers adjust recommendations, not permanent title overrides.
 

@@ -122,5 +122,6 @@
       "result": "PASS"
     }
   ],
-  "count": 30
+  "count": 30,
+  "pluginVersion": "0.1.1.0"
 }

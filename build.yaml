@@ -1,7 +1,7 @@
 ---
 name: KidGuard
 guid: f2247450-a459-4c15-9ee2-9e56c8737ce1
-version: 0.1.0.0
+version: 0.1.1.0
 targetAbi: 12.0.0.0
 framework: net10.0
 overview: Parent-reviewed individual child libraries

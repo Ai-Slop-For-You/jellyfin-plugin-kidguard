@@ -5,9 +5,9 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Matching package tag (for example v0.1.0.0)
+        description: Matching package tag (for example v0.1.1.0)
         required: true
-        default: v0.1.0.0
+        default: v0.1.1.0
 permissions:
   contents: write
 concurrency:

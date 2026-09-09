@@ -7,7 +7,7 @@ public static class Ratings
     private static readonly Dictionary<string, int> Ages = new(StringComparer.OrdinalIgnoreCase)
     {
         ["G"] = 0, ["TV-Y"] = 0, ["TV-G"] = 0, ["TV-Y7"] = 7, ["TV-Y7-FV"] = 7,
-        ["PG"] = 8, ["TV-PG"] = 10, ["PG-13"] = 13, ["TV-14"] = 14, ["R"] = 17,
+        ["PG"] = 8, ["TV-PG"] = 12, ["PG-13"] = 13, ["TV-14"] = 14, ["R"] = 17,
         ["NC-17"] = 18, ["TV-MA"] = 18, ["GB-U"] = 0, ["GB-PG"] = 8,
         ["GB-12"] = 12, ["GB-12A"] = 12, ["GB-15"] = 15, ["GB-18"] = 18,
         ["DE-0"] = 0, ["DE-6"] = 6, ["DE-12"] = 12, ["DE-16"] = 16, ["DE-18"] = 18
@@ -74,8 +74,24 @@ public sealed class RecommendationEngine
 {
     public Recommendation Evaluate(ChildProfile profile, Assessment assessment, IReadOnlyDictionary<Guid, Assessment> cache)
     {
-        var sources = assessment.Evidence.Select(e => e.Source).Distinct().ToArray();
-        var ageValues = assessment.Evidence.Select(e => Ratings.Age(e.Rating)).Where(x => x.HasValue).Select(x => x!.Value).ToArray();
+        var evidence = new List<Advisory>(assessment.Evidence);
+        // Only absent episode/season certification falls back to the closest rated TV ancestor.
+        // Keep provenance explicit and never pretend series advisories describe an individual episode.
+        if (assessment.Item.Kind is MediaKind.Episode or MediaKind.Season &&
+            !evidence.Any(e => !e.Failed && Ratings.Age(e.Rating).HasValue))
+        {
+            foreach (var id in assessment.Item.Ancestors)
+            {
+                if (!cache.TryGetValue(id, out var parent) || parent.Item.Kind is not (MediaKind.Series or MediaKind.Season)) continue;
+                if (!parent.Evidence.Any(e => !e.Failed && Ratings.Age(e.Rating).HasValue)) continue;
+                evidence.AddRange(parent.Evidence.Where(e => e.Failed || Ratings.Age(e.Rating).HasValue)
+                    .Select(e => new Advisory($"{e.Source} (inherited from {parent.Item.Title})", e.Rating, [],
+                        $"Using {parent.Item.Kind.ToString().ToLowerInvariant()} certification from '{parent.Item.Title}' because this item has no recognized certification. This is not episode-specific evidence.", e.Failed)));
+                break;
+            }
+        }
+        var sources = evidence.Select(e => e.Source).Distinct().ToArray();
+        var ageValues = evidence.Where(e => !e.Failed).Select(e => Ratings.Age(e.Rating)).Where(x => x.HasValue).Select(x => x!.Value).ToArray();
         int? age = ageValues.Length == 0 ? null : ageValues.Max();
         if (profile.Overrides.TryGetValue(assessment.Item.Id, out var manual) && manual != OverrideKind.None)
             return new(manual is OverrideKind.Allow or OverrideKind.AlwaysAllow ? Decision.Allow : Decision.Block,
@@ -84,29 +100,40 @@ public sealed class RecommendationEngine
         var offset = CalibrationEngine.Offset(profile, cache);
         var ceiling = Math.Clamp(profile.Age + profile.MaturityOffset + offset + (profile.Approach == Approach.Conservative ? -1 : profile.Approach == Approach.Permissive ? 1 : 0), 0, 18);
         reasons.Add($"Profile comfort ceiling {ceiling:0.#}; calibration adjustment {offset:+0.#;-0.#;0}.");
-        if (assessment.Evidence.Any(e => e.Failed))
-            return new(Decision.Review, 25, age, [.. reasons, "An enabled provider failed. Review before allowing."], sources);
-        if (ageValues.Length > 1 && ageValues.Max() - ageValues.Min() >= 3)
-            return new(Decision.Review, 35, age, [.. reasons, "Certification sources disagree significantly."], sources);
-        var dimensions = assessment.Evidence.SelectMany(e => e.Dimensions).GroupBy(d => d.Key).ToDictionary(g => g.Key, g => g.Max(d => d.Value));
+        var childrensPass = profile.Age >= 9 && assessment.Item.Kind is (MediaKind.Series or MediaKind.Season or MediaKind.Episode)
+            && evidence.Any(e => !e.Failed && e.Rating?.Trim().ToUpperInvariant() is ("TV-Y" or "TV-Y7" or "TV-Y7-FV"))
+            && ageValues.All(a => a <= 7);
+        if (childrensPass)
+        {
+            ceiling = Math.Max(ceiling, 7);
+            reasons.Add("Age 9+ children's-TV rule: TV-Y/TV-Y7 recommendations do not require extra review solely because calibration is gentler. Explicit content limits still apply.");
+        }
+        reasons.AddRange(evidence.Skip(assessment.Evidence.Count).Select(e => e.Note).Distinct());
+        if (age.HasValue)
+            reasons.Add($"Reported certification: {string.Join(", ", evidence.Where(e => !e.Failed).Select(e => e.Rating).Where(r => !string.IsNullOrWhiteSpace(r)).Distinct())}; editorial age starting point {age}.");
+        // Uncertainty cannot turn an established above-ceiling rating into an ambiguous Review.
+        if (age > ceiling)
+            return new(Decision.Block, 90, age, [.. reasons, "Certification exceeds the calibrated comfort ceiling. Any lower or unavailable source does not override that restriction."], sources);
+        var dimensions = evidence.Where(e => !e.Failed).SelectMany(e => e.Dimensions).GroupBy(d => d.Key).ToDictionary(g => g.Key, g => g.Max(d => d.Value));
         foreach (var (dimension, severity) in dimensions)
         {
             var tolerance = CalibrationEngine.Tolerance(profile, dimension, cache);
             reasons.Add($"{dimension}: reported {severity}/4; tolerance {tolerance}/4.");
             if (severity > tolerance) return new(Decision.Block, 90, age, [.. reasons, $"{dimension} exceeds your tolerance."], sources);
         }
+        if (evidence.Any(e => e.Failed))
+            return new(Decision.Review, 25, age, [.. reasons, "An enabled provider failed. Review before allowing."], sources);
+        if (!childrensPass && ageValues.Length > 1 && ageValues.Max() - ageValues.Min() >= 3)
+            return new(Decision.Review, 35, age, [.. reasons, "Certification sources disagree significantly."], sources);
         if (age is null)
             return new(Decision.Review, 20, null, [.. reasons, "Missing or unrecognized certification. Unknown does not mean safe."], sources);
-        reasons.Add($"Reported certification: {string.Join(", ", assessment.Evidence.Select(e => e.Rating).Where(r => !string.IsNullOrWhiteSpace(r)).Distinct())}; editorial age starting point {age}.");
-        if (age > ceiling) return new(Decision.Block, 90, age, [.. reasons, "Certification exceeds the calibrated comfort ceiling."], sources);
         // Explicit advanced constraints cannot be verified without the corresponding evidence.
         if (profile.Tolerances.Keys.Any(d => !dimensions.ContainsKey(d)))
             return new(Decision.Review, 45, age, [.. reasons, "A dimension you explicitly constrained has no advisory evidence."], sources);
-        if (assessment.Item.Kind is MediaKind.Series or MediaKind.Season)
-            return new(Decision.Review, 55, age, [.. reasons, "TV container ratings do not establish the suitability of every episode. Inspect the episodes or approve this container's current descendants."], sources);
         var confidence = dimensions.Count == Enum.GetValues<Dimension>().Length ? 95 : age == 0 ? 85 : 70;
+        if (evidence.Count > assessment.Evidence.Count) confidence = Math.Min(confidence, 70);
         if (profile.Age < 8 && dimensions.Count < 3 && age != 0)
             return new(Decision.Review, 45, age, [.. reasons, "Limited advisory detail for a young profile."], sources);
-        return new(Decision.Allow, confidence, age, [.. reasons, "Within the selected ceiling. Unreported content dimensions remain unknown; parent review is required."], sources);
+        return new(Decision.Allow, confidence, age, [.. reasons, "Within the selected ceiling. Recommended for the draft allowlist; apply the reviewed profile to grant access. Unreported content dimensions remain unknown."], sources);
     }
 }

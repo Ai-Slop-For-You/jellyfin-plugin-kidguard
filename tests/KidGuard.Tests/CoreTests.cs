@@ -22,7 +22,7 @@ public class CoreTests
     [Theory]
     [InlineData(null)] [InlineData("")] [InlineData("NR")] [InlineData("unknown-12")]
     public void UnknownNeverMeansSafe(string? rating) => Assert.Equal(Decision.Review, Evaluate(new(), Item(rating)).Decision);
-    [Fact] public void SourcesDisagree() { var a=Item("G", extra: new Advisory("External", "R", [], "Fixture")); Assert.Equal(Decision.Review,Evaluate(new() { Age=17 },a).Decision); }
+    [Fact] public void SourcesDisagree() { var a=Item("G", extra: new Advisory("External", "R", [], "Fixture")); Assert.Equal(Decision.Review,Evaluate(new() { Age=17, Approach=Approach.Standard },a).Decision); }
     [Fact] public void FailureRemainsReview() { var a=Item("G", extra: new Advisory("External", null, [], "Timeout",true)); Assert.Equal(Decision.Review,Evaluate(new(),a).Decision); }
     [Theory] [InlineData(OverrideKind.AlwaysAllow,Decision.Allow)] [InlineData(OverrideKind.AlwaysBlock,Decision.Block)] [InlineData(OverrideKind.Allow,Decision.Allow)] [InlineData(OverrideKind.Block,Decision.Block)]
     public void ParentOverrideWinsEvenWithMissingOrConflictingData(OverrideKind kind, Decision decision)
@@ -60,6 +60,101 @@ public class CoreTests
         var dir=Path.Combine(Path.GetTempPath(),Guid.NewGuid().ToString());try{
             var path=Path.Combine(dir,"state.json");var store=new AtomicStore<State>(path);var p=new ChildProfile();p.Overrides[Guid.NewGuid()]=OverrideKind.AlwaysBlock;var state=new State(){Profiles=[p]};store.Write(state);Assert.Equal(p.Overrides,store.Read().Profiles[0].Overrides);File.WriteAllText(path,"corrupt");Assert.Throws<System.Text.Json.JsonException>(()=>store.Read());
         }finally{Directory.Delete(dir,true);}
+    }
+    [Theory]
+    [InlineData("TV-Y", Decision.Allow)]
+    [InlineData("TV-Y7", Decision.Allow)]
+    [InlineData("TV-Y7-FV", Decision.Allow)]
+    [InlineData("TV-G", Decision.Allow)]
+    [InlineData("TV-PG", Decision.Block)]
+    [InlineData("TV-14", Decision.Block)]
+    [InlineData(null, Decision.Review)]
+    public void NineYearOldGetsDecisiveSeriesRecommendations(string? rating, Decision expected)
+        => Assert.Equal(expected, Evaluate(new() { Age = 9 }, Item(rating, MediaKind.Series)).Decision);
+
+    [Theory]
+    [InlineData(6, "TV-Y7", Decision.Block)]
+    [InlineData(6, "TV-Y", Decision.Allow)]
+    [InlineData(9, "TV-Y7", Decision.Allow)]
+    [InlineData(9, "TV-Y7-FV", Decision.Allow)]
+    [InlineData(9, "TV-PG", Decision.Block)]
+    public void ChildrensTvRuleIsAgeBasedEvenWithGentleCalibration(int age, string rating, Decision expected)
+    {
+        var gentle = Item("G"); var series = Item(rating, MediaKind.Series);
+        var cache = new[] { gentle, series }.ToDictionary(a => a.Item.Id);
+        var p = new ChildProfile { Age = age, MaturityOffset = -3, Calibration = [new(gentle.Item.Id, Decision.Allow)] };
+        Assert.Equal(expected, new RecommendationEngine().Evaluate(p, series, cache).Decision);
+    }
+    [Fact] public void ChildrensTvRuleCannotHideAdultConflictOrOverrideParentLimits()
+    {
+        var p = new ChildProfile { Age = 9, MaturityOffset = -3 };
+        var conflict = Item("TV-Y7", MediaKind.Series, extra: new Advisory("Other", "TV-14", [], "Conflicting rating"));
+        Assert.Equal(Decision.Block, Evaluate(p, conflict).Decision);
+        p.Tolerances[Dimension.Fear] = 0;
+        Assert.Equal(Decision.Review, Evaluate(p, Item("TV-Y7", MediaKind.Series)).Decision);
+        var blocked = Item("TV-Y7", MediaKind.Series); p.Overrides[blocked.Item.Id] = OverrideKind.AlwaysBlock;
+        Assert.Equal(Decision.Block, Evaluate(p, blocked).Decision);
+    }
+    [Fact] public void AnimationOrKidsGenreAloneDoesNotQualifyForChildrensPass()
+    {
+        var a = Item(null, MediaKind.Series);
+        a = a with { Item = a.Item with { Genres = ["Animation", "Kids"] } };
+        Assert.Equal(Decision.Review, Evaluate(new() { Age = 9 }, a).Decision);
+    }
+    [Fact] public void PositiveCalibrationDoesNotPassTvPgForConservativeNineYearOld()
+    {
+        var sample = Item("PG-13"); var series = Item("TV-PG", MediaKind.Series);
+        var cache = new[] { sample, series }.ToDictionary(a => a.Item.Id);
+        var p = new ChildProfile { Age = 9, Calibration = [new(sample.Item.Id, Decision.Allow)] };
+        Assert.Equal(3, CalibrationEngine.Offset(p, cache));
+        Assert.Equal(Decision.Block, new RecommendationEngine().Evaluate(p, series, cache).Decision);
+    }
+    [Fact] public void ClearAgeBlockSurvivesProviderFailureAndLowerConflictingRating()
+    {
+        var a = Item("TV-14", MediaKind.Series, extra: [new("Other", "TV-G", [], "Conflict"), new("Unavailable", null, [], "Timeout", true)]);
+        Assert.Equal(Decision.Block, Evaluate(new() { Age = 9 }, a).Decision);
+    }
+    [Fact] public void SeriesFallbackApprovesKnownEpisodesButKeepsHigherRatedException()
+    {
+        var series = Item("TV-Y7", MediaKind.Series);
+        var season = Item(null, MediaKind.Season, ancestors: [series.Item.Id]);
+        var episode = Item(null, MediaKind.Episode, ancestors: [season.Item.Id, series.Item.Id]);
+        var exception = Item("TV-14", MediaKind.Episode, ancestors: [season.Item.Id, series.Item.Id]);
+        var cache = new[] { series, season, episode, exception }.ToDictionary(a => a.Item.Id);
+        var p = new ChildProfile { Age = 9 }; var engine = new RecommendationEngine();
+        foreach (var a in cache.Values) p.Recommendations[a.Item.Id] = engine.Evaluate(p, a, cache);
+        var rec = p.Recommendations[episode.Item.Id];
+        Assert.Equal(Decision.Allow, rec.Decision);
+        Assert.Contains(rec.Reasons, r => r.Contains("not episode-specific"));
+        Assert.Contains(rec.Sources, r => r.Contains("inherited"));
+        Assert.True(rec.Confidence < 90); // A series fallback cannot enable unattended new-media approval.
+        var plan = ApprovalPlanner.Build(p, cache);
+        Assert.Equal([episode.Item.Id], plan.Playable);
+        Assert.Contains(series.Item.Id, plan.Navigation);
+        Assert.DoesNotContain(Guid.NewGuid(), plan.Playable);
+    }
+    [Fact] public void FallbackDoesNotInventDimensionsOrBypassEpisodeAdvisories()
+    {
+        var series = Item("TV-Y7", MediaKind.Series, extra: new Advisory("Series", null, new() { [Dimension.Fear] = 0 }, "Series-only detail"));
+        var episode = Item(null, MediaKind.Episode, ancestors: [series.Item.Id]);
+        var cache = new[] { series, episode }.ToDictionary(a => a.Item.Id);
+        var p = new ChildProfile { Age = 9, Tolerances = { [Dimension.Fear] = 1 } };
+        var engine = new RecommendationEngine();
+        Assert.Equal(Decision.Review, engine.Evaluate(p, episode, cache).Decision);
+        episode = episode with { Evidence = [new("Episode", null, new() { [Dimension.Fear] = 3 }, "Episode advisory")] };
+        Assert.Equal(Decision.Block, engine.Evaluate(p, episode, cache).Decision);
+    }
+    [Fact] public void FallbackRespectsFailuresAndClosestSeasonCertification()
+    {
+        var series = Item("TV-Y7", MediaKind.Series);
+        var season = Item("TV-14", MediaKind.Season, ancestors: [series.Item.Id]);
+        var episode = Item(null, MediaKind.Episode, ancestors: [season.Item.Id, series.Item.Id]);
+        var cache = new[] { series, season, episode }.ToDictionary(a => a.Item.Id);
+        var p = new ChildProfile { Age = 9 }; var engine = new RecommendationEngine();
+        Assert.Equal(Decision.Block, engine.Evaluate(p, episode, cache).Decision);
+        cache.Remove(season.Item.Id);
+        cache[series.Item.Id] = series with { Evidence = [.. series.Evidence, new("Unavailable", null, [], "Timeout", true)] };
+        Assert.Equal(Decision.Review, engine.Evaluate(p, episode, cache).Decision);
     }
     [Fact] public void TenThousandItemsProduceAnExactPlan()
     {var items=Enumerable.Range(0,10000).Select(_=>Item("G")).ToDictionary(a=>a.Item.Id);var p=new ChildProfile();var engine=new RecommendationEngine();foreach(var a in items.Values)p.Recommendations[a.Item.Id]=engine.Evaluate(p,a,items);Assert.Equal(10000,ApprovalPlanner.Build(p,items).Playable.Count);}
