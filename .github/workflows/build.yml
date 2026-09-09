@@ -1,0 +1,17 @@
+name: Build and test
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - run: python3 scripts/package.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KidGuard-preview
+          path: artifacts/

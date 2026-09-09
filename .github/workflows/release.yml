@@ -1,0 +1,42 @@
+name: Publish Jellyfin plugin
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+concurrency:
+  group: kidguard-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: Build, test and package
+        env:
+          RELEASE_BASE: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/
+        run: python3 scripts/package.py --base-url "$RELEASE_BASE"
+      - name: Verify tag matches package version
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          version = json.loads(Path('artifacts/repository.json').read_text())[0]['versions'][0]['version']
+          assert os.environ['RELEASE_TAG'] == 'v' + version, 'Tag must match package version'
+          PY
+      - name: Publish preview release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" artifacts/*.zip artifacts/SHA256SUMS artifacts/repository.json artifacts/unit-tests.trx --verify-tag --prerelease --title "KidGuard $RELEASE_TAG — tested preview" --notes-file CHANGELOG.md
+      - name: Update Jellyfin catalog after upload succeeds
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_BRANCH: ${{ github.event.repository.default_branch }}
+        run: python3 scripts/publish-manifest.py --repository "$GITHUB_REPOSITORY" --branch "$RELEASE_BRANCH" --manifest artifacts/repository.json

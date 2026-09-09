@@ -1,0 +1,126 @@
+{
+  "server": "12.0.0",
+  "tests": [
+    {
+      "test": "Draft does not create a Jellyfin user",
+      "result": "PASS"
+    },
+    {
+      "test": "Anonymous cannot read admin API",
+      "result": "PASS"
+    },
+    {
+      "test": "Apply requires explicit approval",
+      "result": "PASS"
+    },
+    {
+      "test": "Child cannot read admin API",
+      "result": "PASS"
+    },
+    {
+      "test": "Native allow tag and child permission policy installed",
+      "result": "PASS"
+    },
+    {
+      "test": "Allowed direct item lookup succeeds",
+      "result": "PASS"
+    },
+    {
+      "test": "Blocked direct item lookup denied",
+      "result": "PASS"
+    },
+    {
+      "test": "Blocked playback info denied",
+      "result": "PASS"
+    },
+    {
+      "test": "Blocked direct stream denied",
+      "result": "PASS"
+    },
+    {
+      "test": "Allowed direct stream returns video bytes",
+      "result": "PASS"
+    },
+    {
+      "test": "Episode exception overrides allowed series",
+      "result": "PASS"
+    },
+    {
+      "test": "Cross-user browse is denied",
+      "result": "PASS"
+    },
+    {
+      "test": "Blocked content absent from recursive browsing",
+      "result": "PASS"
+    },
+    {
+      "test": "Blocked content absent from search",
+      "result": "PASS"
+    },
+    {
+      "test": "Blocked content absent from recently added",
+      "result": "PASS"
+    },
+    {
+      "test": "Blocked content absent from next up",
+      "result": "PASS"
+    },
+    {
+      "test": "Blocked content absent from recommendations",
+      "result": "PASS"
+    },
+    {
+      "test": "Live TV API denied",
+      "result": "PASS"
+    },
+    {
+      "test": "Download route denied",
+      "result": "PASS"
+    },
+    {
+      "test": "Manual tag application preserves unrelated tags",
+      "result": "PASS"
+    },
+    {
+      "test": "New episode stream denied before parent review",
+      "result": "PASS"
+    },
+    {
+      "test": "New episode absent from child browse",
+      "result": "PASS"
+    },
+    {
+      "test": "Reanalysis preserves Always Block",
+      "result": "PASS"
+    },
+    {
+      "test": "New episode stays denied after reanalysis without apply",
+      "result": "PASS"
+    },
+    {
+      "test": "Second child can access their independent override",
+      "result": "PASS"
+    },
+    {
+      "test": "First child remains blocked after second child apply",
+      "result": "PASS"
+    },
+    {
+      "test": "Stale approval revision rejected",
+      "result": "PASS"
+    },
+    {
+      "test": "Reapply removes access",
+      "result": "PASS"
+    },
+    {
+      "test": "Undo restores the preceding approved library",
+      "result": "PASS"
+    },
+    {
+      "test": "Child cannot modify overrides",
+      "result": "PASS"
+    }
+  ],
+  "count": 30
+}
