@@ -4,6 +4,14 @@ An installable, parent-reviewed child-library manager for **Jellyfin Server 12.0
 
 ## Install
 
+In **Dashboard → Plugins → Repositories**, add this repository URL:
+
+```text
+https://raw.githubusercontent.com/Ai-Slop-For-You/jellyfin-plugin-kidguard/main/manifest.json
+```
+
+Install **KidGuard** from the catalog and restart Jellyfin. Requires Jellyfin **12.0.0**. [Release downloads](https://github.com/Ai-Slop-For-You/jellyfin-plugin-kidguard/releases) include the plugin, corresponding source and checksums. For manual installation:
+
 1. Back up Jellyfin's configuration and database. Start with a test server.
 2. Stop Jellyfin. Extract `KidGuard_0.1.0.0.zip` into a new `KidGuard_0.1.0.0` directory inside Jellyfin's **plugins directory**. Keep both DLLs together. Do not copy Jellyfin's own dependency DLLs into the plugin directory.
 3. Restart Jellyfin. Confirm KidGuard is Active under **Dashboard → Plugins**.

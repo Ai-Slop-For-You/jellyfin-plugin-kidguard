@@ -10,7 +10,7 @@ Optional TMDb: create an API Read Access Token using TMDb's official account/API
 
 ## Host a plugin repository
 
-Run `python3 scripts/package.py --base-url https://YOUR-HOST.example/kidguard/`. Upload `repository.json`, the named ZIP, its checksums and corresponding source to that location using your hosting service. In Jellyfin, add the `repository.json` HTTPS URL under Dashboard → Plugins → Repositories, then find KidGuard in the catalog. No repository has been publicly published by this project; the supplied template is intentionally non-routable.
+Run `python3 scripts/package.py --base-url https://YOUR-HOST.example/kidguard/`. Upload `repository.json`, the named ZIP, its checksums and corresponding source to that location using your hosting service. In Jellyfin, add the `repository.json` HTTPS URL under Dashboard → Plugins → Repositories, then find KidGuard in the catalog. The public GitHub catalog is `https://raw.githubusercontent.com/Ai-Slop-For-You/jellyfin-plugin-kidguard/main/manifest.json`. The generic package template remains intentionally non-routable until a hosting URL is supplied.
 
 The repository entry contains plugin GUID `f2247450-a459-4c15-9ee2-9e56c8737ce1`, version `0.1.0.0`, target ABI `12.0.0.0`, source ZIP URL, timestamp and MD5 (Jellyfin's manifest format). Check the supplied SHA-256 separately if installing manually.
 
@@ -43,7 +43,7 @@ Opaque KidGuard tags may be removed later through normal metadata editing, after
 The included `.github/workflows/release.yml` builds and tests a version tag, uploads the plugin ZIP, corresponding source, checksums and test results as a GitHub preview release, then updates `manifest.json` on the default branch. Existing version entries are preserved. The manifest is published only after the release upload succeeds. GitHub Pages is not required.
 
 1. Create an empty **public** GitHub repository (suggested name: `jellyfin-plugin-kidguard`) and push this source to its default branch.
-2. Push tag `v0.1.0.0`. Actions must be enabled and allowed to write repository contents. Default-branch protection must permit the workflow's manifest update; otherwise the release succeeds but the catalog update needs a reviewed PR.
+2. For a first release, run **Publish Jellyfin plugin → Run workflow** with tag `v0.1.0.0`, or push that tag. Actions must be enabled and allowed to write repository contents. Default-branch protection must permit the workflow's manifest update; otherwise the release succeeds but the catalog update needs a reviewed PR.
 3. Wait for **Publish Jellyfin plugin** to succeed.
 4. Add `https://raw.githubusercontent.com/OWNER/jellyfin-plugin-kidguard/BRANCH/manifest.json` to Jellyfin's plugin repositories, replacing OWNER and BRANCH with the actual account and default branch. Install KidGuard from the catalog and restart Jellyfin.
 
