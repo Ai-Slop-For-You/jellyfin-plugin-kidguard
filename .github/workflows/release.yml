@@ -2,6 +2,12 @@ name: Publish Jellyfin plugin
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Matching package tag (for example v0.1.0.0)
+        required: true
+        default: v0.1.0.0
 permissions:
   contents: write
 concurrency:
@@ -17,11 +23,11 @@ jobs:
           dotnet-version: '10.0.x'
       - name: Build, test and package
         env:
-          RELEASE_BASE: https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/
+          RELEASE_BASE: https://github.com/${{ github.repository }}/releases/download/${{ inputs.tag || github.ref_name }}/
         run: python3 scripts/package.py --base-url "$RELEASE_BASE"
       - name: Verify tag matches package version
         env:
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           python3 - <<'PY'
           import json, os
@@ -32,9 +38,10 @@ jobs:
       - name: Publish preview release assets
         env:
           GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.ref_name }}
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+          RELEASE_COMMIT: ${{ github.sha }}
         run: |
-          gh release create "$RELEASE_TAG" artifacts/*.zip artifacts/SHA256SUMS artifacts/repository.json artifacts/unit-tests.trx --verify-tag --prerelease --title "KidGuard $RELEASE_TAG — tested preview" --notes-file CHANGELOG.md
+          gh release create "$RELEASE_TAG" artifacts/*.zip artifacts/SHA256SUMS artifacts/repository.json artifacts/unit-tests.trx --target "$RELEASE_COMMIT" --prerelease --title "KidGuard $RELEASE_TAG — tested preview" --notes-file CHANGELOG.md
       - name: Update Jellyfin catalog after upload succeeds
         env:
           GH_TOKEN: ${{ github.token }}
