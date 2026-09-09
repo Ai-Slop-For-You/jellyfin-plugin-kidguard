@@ -1,0 +1,20 @@
+[
+  {
+    "guid": "f2247450-a459-4c15-9ee2-9e56c8737ce1",
+    "name": "KidGuard",
+    "overview": "Parent-reviewed individual child libraries",
+    "description": "Evaluated preview: individual child profiles, transparent recommendations, native policies and exact approved snapshots. Read the security scope before use.",
+    "owner": "KidGuard contributors",
+    "category": "General",
+    "versions": [
+      {
+        "version": "0.1.0.0",
+        "targetAbi": "12.0.0.0",
+        "changelog": "Initial evaluated preview for Jellyfin 12.0.0.",
+        "timestamp": "2026-09-08T00:00:00Z",
+        "sourceUrl": "https://github.com/Ai-Slop-For-You/jellyfin-plugin-kidguard/releases/download/v0.1.0.0/KidGuard_0.1.0.0.zip",
+        "checksum": "9e245e4bb151143d5e6785b2c867e8c7"
+      }
+    ]
+  }
+]
